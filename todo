@@ -1,0 +1,70 @@
+#!/opt/homebrew/bin/python3
+
+import click, requests, uuid, json, config
+from PyInquirer import prompt, print_json
+
+@click.group()
+def main():
+		""" Manage your todos from the command line"""
+		pass
+
+@main.command()
+def add():
+	"""Add a new todo"""
+	question = [
+			{
+				'type': 'input',
+				'name': 'task_content',
+				'message': 'Task description',
+			}
+		]
+
+	answer = prompt(question)
+	if not answer:
+		return
+
+	requests.post(
+			"https://api.todoist.com/rest/v1/tasks",
+			data=json.dumps({
+					"content": answer['task_content'],
+			}),
+			headers={
+					"Content-Type": "application/json",
+					"X-Request-Id": str(uuid.uuid4()),
+					"Authorization": "Bearer %s" % config.api
+			}).json()
+
+@main.command()
+def ls():
+	"""Update tasks in a list"""
+	# Get all lists
+	tasks = requests.get(
+		"https://api.todoist.com/rest/v1/tasks",
+		headers={
+				"Authorization": "Bearer %s" % config.api
+		}).json()
+	# Show an interactive checklist for the tasks
+	questions = [
+			{
+					'type': 'checkbox',
+					'message': 'Toggle todos',
+					'name': 'todos',
+					'choices': list(map(lambda task: {'name': task['content'], 'checked': task["completed"]}, tasks)),
+			}
+	]
+	answers = prompt(questions)
+	if not answers:
+			return
+
+	# Call our Update API for each task in the list
+	for task in tasks:
+		if task['content'] in answers['todos']:
+			requests.post(
+				"https://api.todoist.com/rest/v1/tasks/%s/close" % task['id'],
+			headers={
+				"X-Request-Id": str(uuid.uuid4()),
+				"Authorization": "Bearer %s" % config.api
+		})
+	 
+if __name__ == "__main__":
+		main()
